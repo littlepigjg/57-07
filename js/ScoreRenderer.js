@@ -4,18 +4,22 @@ class ScoreRenderer {
         this.ctx = canvas.getContext('2d');
         this.notes = [];
         this.barLines = [];
+        this.chords = [];
         this.selectedNoteId = null;
         this.selectedBarLineId = null;
+        this.selectedChordId = null;
         this.highlightNoteId = null;
         this.key = options.key || 'G';
+        this.originalKey = this.key;
         this.timeSignature = options.timeSignature || '4/4';
         this.tempo = options.tempo || 120;
 
         this.config = {
-            paddingTop: 60,
+            paddingTop: 80,
             paddingBottom: 40,
             paddingLeft: 50,
             paddingRight: 30,
+            chordPadding: 15,
             noteSpacing: 14,
             noteWidth: 28,
             staffLineY: 200,
@@ -23,6 +27,7 @@ class ScoreRenderer {
             staffLines: 5,
             fontSize: 28,
             fontSizeSmall: 14,
+            chordFontSize: 20,
             color: {
                 staff: '#999',
                 note: '#333',
@@ -31,7 +36,10 @@ class ScoreRenderer {
                 barLine: '#333',
                 tie: '#666',
                 text: '#666',
-                background: '#fffef8'
+                background: '#fffef8',
+                chord: '#1565c0',
+                chordSelected: '#e53935',
+                chordBackground: 'rgba(21, 101, 192, 0.08)'
             }
         };
 
@@ -73,14 +81,36 @@ class ScoreRenderer {
         });
     }
 
-    setData(notes, barLines) {
+    setData(notes, barLines, chords) {
         this.notes = notes || [];
         this.barLines = barLines || [];
+        this.chords = chords || [];
+        this.render();
+    }
+
+    setChords(chords) {
+        this.chords = chords || [];
         this.render();
     }
 
     setKey(key) {
+        const oldKey = this.key;
         this.key = key;
+
+        if (this.chords && this.chords.length > 0 && oldKey !== key) {
+            this.chords.forEach(chord => {
+                if (chord.transpose) {
+                    chord.transpose(oldKey, key);
+                } else if (ChordUtils) {
+                    const transposed = ChordUtils.transposeChord(chord, oldKey, key);
+                    chord.root = transposed.root;
+                    chord.bass = transposed.bass;
+                    chord.display = transposed.display;
+                    chord.name = transposed.display;
+                }
+            });
+        }
+
         this.render();
     }
 
@@ -107,12 +137,21 @@ class ScoreRenderer {
     setSelectedBarLine(id) {
         this.selectedBarLineId = id;
         this.selectedNoteId = null;
+        this.selectedChordId = null;
+        this.render();
+    }
+
+    setSelectedChord(id) {
+        this.selectedChordId = id;
+        this.selectedNoteId = null;
+        this.selectedBarLineId = null;
         this.render();
     }
 
     clearSelection() {
         this.selectedNoteId = null;
         this.selectedBarLineId = null;
+        this.selectedChordId = null;
         this.render();
     }
 
@@ -145,6 +184,21 @@ class ScoreRenderer {
         return null;
     }
 
+    getChordAt(x, y) {
+        const positions = this._calculateChordPositions();
+        for (let i = positions.length - 1; i >= 0; i--) {
+            const p = positions[i];
+            if (!p) continue;
+            const halfW = (p.width || 50) / 2 + 5;
+            const halfH = (p.height || 30) / 2 + 5;
+            if (x >= p.x - halfW && x <= p.x + halfW &&
+                y >= p.y - halfH && y <= p.y + halfH) {
+                return this.chords[i];
+            }
+        }
+        return null;
+    }
+
     getInsertPosition(x) {
         const positions = this._calculateNotePositions();
         let insertIndex = this.notes.length;
@@ -164,6 +218,54 @@ class ScoreRenderer {
         const position = durationSum;
 
         return { index: insertIndex, position };
+    }
+
+    getChordInsertPosition(x) {
+        const positions = this._calculateNotePositions();
+        let insertPosition = 0;
+        let attachedNoteId = null;
+
+        let closestNoteIdx = -1;
+        let closestDist = Infinity;
+
+        for (let i = 0; i < positions.length; i++) {
+            if (positions[i]) {
+                const dist = Math.abs(x - positions[i].x);
+                if (dist < closestDist && dist < this.config.noteWidth) {
+                    closestDist = dist;
+                    closestNoteIdx = i;
+                }
+            }
+        }
+
+        if (closestNoteIdx >= 0) {
+            attachedNoteId = this.notes[closestNoteIdx].id;
+            let durationSum = 0;
+            for (let i = 0; i < closestNoteIdx; i++) {
+                if (this.notes[i]) {
+                    durationSum += this.notes[i].duration;
+                }
+            }
+            insertPosition = durationSum;
+        } else {
+            let insertIndex = this.notes.length;
+            for (let i = 0; i < positions.length; i++) {
+                if (positions[i] && x < positions[i].x) {
+                    insertIndex = i;
+                    break;
+                }
+            }
+
+            let durationSum = 0;
+            for (let i = 0; i < insertIndex; i++) {
+                if (this.notes[i]) {
+                    durationSum += this.notes[i].duration;
+                }
+            }
+            insertPosition = durationSum;
+        }
+
+        return { position: insertPosition, attachedNoteId };
     }
 
     _calculateNotePositions() {
@@ -240,6 +342,71 @@ class ScoreRenderer {
         return positions;
     }
 
+    _calculateChordPositions() {
+        const positions = [];
+        const lineWidth = this.renderWidth - this.config.paddingLeft - this.config.paddingRight;
+        const beatsPerRow = Math.floor(lineWidth / (this.config.noteWidth + this.config.noteSpacing));
+        const beatsPerBar = parseInt(this.timeSignature.split('/')[0]);
+
+        const notePositions = this.notes.map(() => 0);
+        let cumulativeDuration = 0;
+        this.notes.forEach((note, idx) => {
+            notePositions[idx] = cumulativeDuration;
+            cumulativeDuration += note.duration;
+        });
+
+        this.chords.forEach((chord) => {
+            let x, rowY;
+            let attachedNote = null;
+
+            if (chord.attachedTo) {
+                attachedNote = this.notes.find(n => n.id === chord.attachedTo);
+            }
+
+            if (attachedNote) {
+                const noteIndex = this.notes.findIndex(n => n.id === chord.attachedTo);
+                const notePosition = notePositions[noteIndex] !== undefined ? notePositions[noteIndex] : 0;
+
+                const barLinesBefore = this.barLines.filter(bl => bl.position <= notePosition).length;
+                const visiblePosition = notePosition + barLinesBefore * 0.5;
+
+                const row = Math.floor(visiblePosition / beatsPerRow);
+                const col = visiblePosition - row * beatsPerRow;
+
+                x = this.config.paddingLeft + col * (this.config.noteWidth + this.config.noteSpacing) + this.config.noteWidth / 2;
+                rowY = this.config.paddingTop + 60 + row * 120;
+            } else {
+                const chordPosition = chord.position || 0;
+                const barLinesBefore = this.barLines.filter(bl => bl.position <= chordPosition).length;
+                const visiblePosition = chordPosition + barLinesBefore * 0.5;
+
+                const row = Math.floor(visiblePosition / beatsPerRow);
+                const col = visiblePosition - row * beatsPerRow;
+
+                x = this.config.paddingLeft + col * (this.config.noteWidth + this.config.noteSpacing) + this.config.noteWidth / 2;
+                rowY = this.config.paddingTop + 60 + row * 120;
+            }
+
+            const chordY = rowY - this.config.chordPadding - 10;
+
+            const ctx = this.ctx;
+            ctx.save();
+            ctx.font = `bold ${this.config.chordFontSize}px ${this._getFont()}`;
+            const textWidth = ctx.measureText(chord.display || chord.name || 'C').width;
+            ctx.restore();
+
+            positions.push({
+                x,
+                y: chordY,
+                rowY,
+                width: textWidth + 16,
+                height: this.config.chordFontSize + 8
+            });
+        });
+
+        return positions;
+    }
+
     _getOctaveOffset(octave) {
         return NoteUtils.getOctaveLabel(octave) === '低' ? 40 :
                NoteUtils.getOctaveLabel(octave) === '高' ? -40 : 0;
@@ -262,6 +429,7 @@ class ScoreRenderer {
         this._drawBarLines();
         this._drawTies();
         this._drawNotes();
+        this._drawChords();
         this._drawSelection();
     }
 
@@ -450,6 +618,67 @@ class ScoreRenderer {
                 ctx.font = `12px ${this._getFont()}`;
                 ctx.fillText('⌒', p.x, p.y - cfg.fontSize / 2 - 20);
             }
+        });
+    }
+
+    _drawChords() {
+        const ctx = this.ctx;
+        const cfg = this.config;
+        const positions = this._calculateChordPositions();
+
+        this.chords.forEach((chord, idx) => {
+            const p = positions[idx];
+            if (!p) return;
+
+            const isSelected = this.selectedChordId === chord.id;
+            const text = chord.display || chord.name || 'C';
+
+            ctx.save();
+
+            if (isSelected) {
+                ctx.fillStyle = cfg.color.chordBackground;
+                const bgWidth = p.width;
+                const bgHeight = p.height;
+                const bgX = p.x - bgWidth / 2;
+                const bgY = p.y - bgHeight / 2;
+                const radius = 6;
+
+                ctx.beginPath();
+                ctx.moveTo(bgX + radius, bgY);
+                ctx.lineTo(bgX + bgWidth - radius, bgY);
+                ctx.quadraticCurveTo(bgX + bgWidth, bgY, bgX + bgWidth, bgY + radius);
+                ctx.lineTo(bgX + bgWidth, bgY + bgHeight - radius);
+                ctx.quadraticCurveTo(bgX + bgWidth, bgY + bgHeight, bgX + bgWidth - radius, bgY + bgHeight);
+                ctx.lineTo(bgX + radius, bgY + bgHeight);
+                ctx.quadraticCurveTo(bgX, bgY + bgHeight, bgX, bgY + bgHeight - radius);
+                ctx.lineTo(bgX, bgY + radius);
+                ctx.quadraticCurveTo(bgX, bgY, bgX + radius, bgY);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.strokeStyle = cfg.color.chordSelected;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            ctx.fillStyle = isSelected ? cfg.color.chordSelected : cfg.color.chord;
+            ctx.font = `bold ${cfg.chordFontSize}px ${this._getFont()}`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, p.x, p.y);
+
+            if (isSelected) {
+                ctx.strokeStyle = cfg.color.chordSelected;
+                ctx.lineWidth = 1;
+                ctx.setLineDash([3, 3]);
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y + p.height / 2);
+                ctx.lineTo(p.x, p.rowY - 25);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            ctx.restore();
         });
     }
 

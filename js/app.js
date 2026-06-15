@@ -165,9 +165,12 @@
         });
 
         keySelect.addEventListener('change', () => {
-            scoreRenderer.setKey(keySelect.value);
-            synthesizer.setKey(keySelect.value);
-            midiExporter.setKey(keySelect.value);
+            const oldKey = scoreRenderer.key;
+            const newKey = keySelect.value;
+            scoreRenderer.setKey(newKey);
+            noteEditor.transposeChords(oldKey, newKey);
+            synthesizer.setKey(newKey);
+            midiExporter.setKey(newKey);
         });
 
         timeSignature.addEventListener('change', () => {
@@ -217,6 +220,8 @@
                 noteEditor.deleteSelectedNote();
             } else if (noteEditor.selectedBarLineId) {
                 noteEditor.deleteSelectedBarLine();
+            } else if (noteEditor.selectedChordId) {
+                noteEditor.deleteSelectedChord();
             }
             updateNoteList();
         });
@@ -279,8 +284,468 @@
         noteEditor.setTool('octave', currentOctave);
         noteEditor.setTool('duration', currentDuration);
 
+        initChordSystem();
+
         setTimeout(() => {
             scoreRenderer.render();
         }, 100);
+
+        function initChordSystem() {
+        const chordModeCheck = document.getElementById('chordModeCheck');
+        const addCustomChordBtn = document.getElementById('addCustomChordBtn');
+        const customChordRow = document.getElementById('customChordRow');
+        const customChordInput = document.getElementById('customChordInput');
+        const confirmCustomChordBtn = document.getElementById('confirmCustomChordBtn');
+        const chordTypeSelect = document.getElementById('chordTypeSelect');
+        const addChordBtn = document.getElementById('addChordBtn');
+        const deleteChordBtn = document.getElementById('deleteChordBtn');
+        const openChordLibraryBtn = document.getElementById('openChordLibraryBtn');
+        const chordLibraryModal = document.getElementById('chordLibraryModal');
+        const closeChordLibraryBtn = document.getElementById('closeChordLibraryBtn');
+        const chordLibraryGrid = document.getElementById('chordLibraryGrid');
+        const addNewChordBtn = document.getElementById('addNewChordBtn');
+        const resetChordLibraryBtn = document.getElementById('resetChordLibraryBtn');
+        const chordEditorModal = document.getElementById('chordEditorModal');
+        const closeChordEditorBtn = document.getElementById('closeChordEditorBtn');
+        const chordEditorTitle = document.getElementById('chordEditorTitle');
+        const chordEditorName = document.getElementById('chordEditorName');
+        const chordEditorDisplay = document.getElementById('chordEditorDisplay');
+        const chordEditorDescription = document.getElementById('chordEditorDescription');
+        const chordEditorStartFret = document.getElementById('chordEditorStartFret');
+        const fingeringInputs = document.getElementById('fingeringInputs');
+        const fingeringPreviewCanvas = document.getElementById('fingeringPreviewCanvas');
+        const saveChordBtn = document.getElementById('saveChordBtn');
+        const cancelChordBtn = document.getElementById('cancelChordBtn');
+
+        let chordLibrary = ChordUtils.loadChordLibrary();
+        let currentChordRoot = 'C';
+        let editingChordId = null;
+
+        generateCommonChordButtons();
+        generateChordRootButtons();
+        updateChordList();
+        renderChordLibrary();
+        initFingeringInputs();
+
+        chordModeCheck.addEventListener('change', () => {
+            noteEditor.setChordMode(chordModeCheck.checked);
+            if (chordModeCheck.checked) {
+                updateCurrentChordTool();
+            }
+        });
+
+        addCustomChordBtn.addEventListener('click', () => {
+            customChordRow.style.display = customChordRow.style.display === 'none' ? 'flex' : 'none';
+        });
+
+        confirmCustomChordBtn.addEventListener('click', () => {
+            const chordName = customChordInput.value.trim();
+            if (chordName) {
+                const parsed = ChordUtils.parseChordName(chordName);
+                const chordInfo = {
+                    name: chordName,
+                    root: parsed.root,
+                    type: parsed.type,
+                    bass: parsed.bass,
+                    display: parsed.display,
+                    description: '自定义和弦'
+                };
+                currentChordRoot = parsed.root;
+                chordTypeSelect.value = parsed.type;
+                noteEditor.setChordTool(chordInfo);
+                chordModeCheck.checked = true;
+                noteEditor.setChordMode(true);
+                customChordRow.style.display = 'none';
+                customChordInput.value = '';
+            }
+        });
+
+        chordTypeSelect.addEventListener('change', updateCurrentChordTool);
+
+        addChordBtn.addEventListener('click', () => {
+            const lastNote = noteEditor.getNotes()[noteEditor.getNotes().length - 1];
+            const position = lastNote ? lastNote.position + lastNote.duration : 0;
+            noteEditor.addChord(position, null);
+        });
+
+        deleteChordBtn.addEventListener('click', () => {
+            if (noteEditor.selectedChordId) {
+                noteEditor.deleteSelectedChord();
+            }
+        });
+
+        openChordLibraryBtn.addEventListener('click', () => {
+            renderChordLibrary();
+            chordLibraryModal.style.display = 'flex';
+        });
+
+        closeChordLibraryBtn.addEventListener('click', () => {
+            chordLibraryModal.style.display = 'none';
+        });
+
+        addNewChordBtn.addEventListener('click', () => {
+            editingChordId = null;
+            chordEditorTitle.textContent = '新建和弦';
+            chordEditorName.value = '';
+            chordEditorDisplay.value = '';
+            chordEditorDescription.value = '';
+            chordEditorStartFret.value = 1;
+            resetFingeringInputs();
+            updateFingeringPreview();
+            chordEditorModal.style.display = 'flex';
+        });
+
+        resetChordLibraryBtn.addEventListener('click', () => {
+            if (confirm('确定要恢复默认和弦库吗？所有自定义和弦将丢失。')) {
+                chordLibrary = ChordUtils.getDefaultChordLibrary();
+                ChordUtils.saveChordLibrary(chordLibrary);
+                renderChordLibrary();
+                generateCommonChordButtons();
+            }
+        });
+
+        closeChordEditorBtn.addEventListener('click', () => {
+            chordEditorModal.style.display = 'none';
+        });
+
+        cancelChordBtn.addEventListener('click', () => {
+            chordEditorModal.style.display = 'none';
+        });
+
+        saveChordBtn.addEventListener('click', () => {
+            const name = chordEditorName.value.trim();
+            if (!name) {
+                alert('请输入和弦名称');
+                return;
+            }
+
+            const parsed = ChordUtils.parseChordName(name);
+            const fingering = getFingeringFromInputs();
+            const startFret = parseInt(chordEditorStartFret.value) || 1;
+
+            const chordData = {
+                id: editingChordId || ChordUtils.generateChordId(),
+                name: name,
+                root: parsed.root,
+                type: parsed.type,
+                bass: parsed.bass,
+                display: chordEditorDisplay.value.trim() || parsed.display,
+                description: chordEditorDescription.value.trim(),
+                fingering: fingering,
+                startFret: startFret,
+                custom: true
+            };
+
+            if (editingChordId) {
+                const idx = chordLibrary.findIndex(c => c.id === editingChordId);
+                if (idx >= 0) {
+                    chordLibrary[idx] = chordData;
+                }
+            } else {
+                chordLibrary.push(chordData);
+            }
+
+            ChordUtils.saveChordLibrary(chordLibrary);
+            renderChordLibrary();
+            generateCommonChordButtons();
+            chordEditorModal.style.display = 'none';
+        });
+
+        chordEditorName.addEventListener('input', () => {
+            const parsed = ChordUtils.parseChordName(chordEditorName.value);
+            if (!chordEditorDisplay.value) {
+                chordEditorDisplay.value = parsed.display;
+            }
+        });
+
+        chordEditorStartFret.addEventListener('change', updateFingeringPreview);
+
+        function generateCommonChordButtons() {
+            const container = document.getElementById('commonChordButtons');
+            container.innerHTML = '';
+
+            const commonChords = chordLibrary.filter(c =>
+                ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'Am', 'Dm', 'Em', 'G7', 'C7'].includes(c.name)
+            ).slice(0, 12);
+
+            commonChords.forEach(chord => {
+                const btn = document.createElement('button');
+                btn.className = 'common-chord-btn';
+                btn.textContent = chord.display || chord.name;
+                btn.title = chord.description || chord.name;
+                btn.addEventListener('click', () => {
+                    noteEditor.setChordTool(chord);
+                    chordModeCheck.checked = true;
+                    noteEditor.setChordMode(true);
+                    currentChordRoot = chord.root;
+                    chordTypeSelect.value = chord.type || '';
+                    updateRootButtonSelection();
+                });
+                container.appendChild(btn);
+            });
+        }
+
+        function generateChordRootButtons() {
+            const container = document.getElementById('chordRootButtons');
+            container.innerHTML = '';
+
+            const roots = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+            roots.forEach(root => {
+                const btn = document.createElement('button');
+                btn.className = 'chord-root-btn';
+                btn.dataset.root = root;
+                btn.textContent = root;
+                btn.addEventListener('click', () => {
+                    currentChordRoot = root;
+                    updateRootButtonSelection();
+                    updateCurrentChordTool();
+                });
+                container.appendChild(btn);
+            });
+
+            updateRootButtonSelection();
+        }
+
+        function updateRootButtonSelection() {
+            const buttons = document.querySelectorAll('.chord-root-btn');
+            buttons.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.root === currentChordRoot);
+            });
+        }
+
+        function updateCurrentChordTool() {
+            const chordType = chordTypeSelect.value;
+            const displayName = ChordUtils.buildChordName(currentChordRoot, chordType, null);
+            const chordInfo = {
+                name: displayName,
+                root: currentChordRoot,
+                type: chordType,
+                bass: null,
+                display: displayName,
+                description: ChordUtils.getChordTypeName(chordType) + '和弦'
+            };
+            noteEditor.setChordTool(chordInfo);
+        }
+
+        function updateChordList() {
+            const chordList = document.getElementById('chordList');
+            const chords = noteEditor.getChords();
+            chordList.innerHTML = '';
+
+            if (chords.length === 0) {
+                chordList.innerHTML = '<div style="color:#999;font-size:12px;text-align:center;padding:20px;">暂无和弦</div>';
+                return;
+            }
+
+            chords.forEach((chord, idx) => {
+                const item = document.createElement('div');
+                item.className = 'chord-item';
+                if (chord.id === noteEditor.selectedChordId) {
+                    item.classList.add('selected');
+                }
+
+                const attachedNote = chord.attachedTo ?
+                    noteEditor.getNotes().find(n => n.id === chord.attachedTo) : null;
+                const positionText = attachedNote ?
+                    `附于音符 ${noteEditor.getNotes().indexOf(attachedNote) + 1}` :
+                    `位置: ${chord.position.toFixed(1)}`;
+
+                item.innerHTML = `
+                    <span class="chord-info">
+                        <span class="chord-name">${chord.display || chord.name}</span>
+                        <small class="chord-type">${chord.description || ''}</small>
+                    </span>
+                    <span class="chord-position">${positionText}</span>
+                `;
+
+                item.addEventListener('click', () => {
+                    noteEditor.setSelectedChord(chord.id);
+                });
+
+                chordList.appendChild(item);
+            });
+        }
+
+        function renderChordLibrary() {
+            chordLibraryGrid.innerHTML = '';
+
+            chordLibrary.forEach(chord => {
+                const card = document.createElement('div');
+                card.className = 'chord-library-card';
+
+                const canvas = document.createElement('canvas');
+                canvas.width = 100;
+                canvas.height = 130;
+                canvas.className = 'chord-canvas';
+
+                card.innerHTML = `
+                    <div class="chord-card-header">
+                        <span class="chord-card-name">${chord.display || chord.name}</span>
+                        <div class="chord-card-actions">
+                            <button class="chord-card-edit" title="编辑">✎</button>
+                            <button class="chord-card-delete" title="删除">✕</button>
+                        </div>
+                    </div>
+                `;
+
+                card.appendChild(canvas);
+
+                const description = document.createElement('div');
+                description.className = 'chord-card-desc';
+                description.textContent = chord.description || '';
+                card.appendChild(description);
+
+                const useBtn = document.createElement('button');
+                useBtn.className = 'chord-card-use';
+                useBtn.textContent = '使用';
+                useBtn.addEventListener('click', () => {
+                    noteEditor.setChordTool(chord);
+                    chordModeCheck.checked = true;
+                    noteEditor.setChordMode(true);
+                    chordLibraryModal.style.display = 'none';
+                });
+                card.appendChild(useBtn);
+
+                card.querySelector('.chord-card-edit').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    editingChordId = chord.id;
+                    chordEditorTitle.textContent = '编辑和弦';
+                    chordEditorName.value = chord.name || '';
+                    chordEditorDisplay.value = chord.display || '';
+                    chordEditorDescription.value = chord.description || '';
+                    chordEditorStartFret.value = chord.startFret || 1;
+                    setFingeringInputs(chord.fingering);
+                    updateFingeringPreview();
+                    chordEditorModal.style.display = 'flex';
+                });
+
+                card.querySelector('.chord-card-delete').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (chord.custom && confirm(`确定要删除和弦 "${chord.display || chord.name}" 吗？`)) {
+                        const idx = chordLibrary.findIndex(c => c.id === chord.id);
+                        if (idx >= 0) {
+                            chordLibrary.splice(idx, 1);
+                            ChordUtils.saveChordLibrary(chordLibrary);
+                            renderChordLibrary();
+                            generateCommonChordButtons();
+                        }
+                    } else if (!chord.custom) {
+                        alert('默认和弦不能删除，但可以编辑修改。');
+                    }
+                });
+
+                const ctx = canvas.getContext('2d');
+                ChordUtils.drawFingeringDiagram(ctx, chord, 0, 0, 100, 130, {
+                    showName: false,
+                    fontSize: 10
+                });
+
+                chordLibraryGrid.appendChild(card);
+            });
+        }
+
+        function initFingeringInputs() {
+            fingeringInputs.innerHTML = '';
+            const stringNames = ['6弦', '5弦', '4弦', '3弦', '2弦', '1弦'];
+
+            for (let i = 0; i < 6; i++) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'fingering-input-wrapper';
+
+                const label = document.createElement('label');
+                label.textContent = stringNames[i];
+                label.className = 'fingering-label';
+
+                const select = document.createElement('select');
+                select.className = 'fingering-select';
+                select.dataset.string = i;
+
+                const options = [
+                    { value: -1, text: '×' },
+                    { value: 0, text: '○' }
+                ];
+                for (let f = 1; f <= 12; f++) {
+                    options.push({ value: f, text: f.toString() });
+                }
+
+                options.forEach(opt => {
+                    const option = document.createElement('option');
+                    option.value = opt.value;
+                    option.textContent = opt.text;
+                    select.appendChild(option);
+                });
+
+                select.addEventListener('change', updateFingeringPreview);
+
+                wrapper.appendChild(label);
+                wrapper.appendChild(select);
+                fingeringInputs.appendChild(wrapper);
+            }
+        }
+
+        function resetFingeringInputs() {
+            const selects = fingeringInputs.querySelectorAll('.fingering-select');
+            selects.forEach(select => {
+                select.value = '0';
+            });
+        }
+
+        function setFingeringInputs(fingering) {
+            const selects = fingeringInputs.querySelectorAll('.fingering-select');
+            if (fingering && fingering.length === 6) {
+                selects.forEach((select, idx) => {
+                    select.value = fingering[idx] !== undefined ? fingering[idx].toString() : '0';
+                });
+            } else {
+                resetFingeringInputs();
+            }
+        }
+
+        function getFingeringFromInputs() {
+            const selects = fingeringInputs.querySelectorAll('.fingering-select');
+            const fingering = [];
+            selects.forEach(select => {
+                fingering.push(parseInt(select.value));
+            });
+            return fingering;
+        }
+
+        function updateFingeringPreview() {
+            const ctx = fingeringPreviewCanvas.getContext('2d');
+            ctx.clearRect(0, 0, fingeringPreviewCanvas.width, fingeringPreviewCanvas.height);
+
+            const chord = {
+                name: chordEditorName.value || 'C',
+                display: chordEditorDisplay.value || chordEditorName.value || 'C',
+                fingering: getFingeringFromInputs(),
+                startFret: parseInt(chordEditorStartFret.value) || 1
+            };
+
+            ChordUtils.drawFingeringDiagram(ctx, chord, 0, 0, 120, 150, {
+                showName: false,
+                fontSize: 11
+            });
+        }
+
+        noteEditor.on('chordsChanged', () => {
+            updateChordList();
+        });
+
+        noteEditor.on('chordAdded', () => {
+            updateChordList();
+        });
+
+        noteEditor.on('chordDeleted', () => {
+            updateChordList();
+        });
+
+        noteEditor.on('selectionChanged', () => {
+            updateChordList();
+        });
+
+        noteEditor.on('notesChanged', () => {
+            updateChordList();
+        });
+        }
     });
 })();

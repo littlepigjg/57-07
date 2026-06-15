@@ -90,6 +90,60 @@
                     </div>
                 </div>
 
+                <h3 style="margin-top: 20px;">和弦工具</h3>
+                <div class="chord-tools">
+                    <div class="tool-row">
+                        <label class="checkbox-label" style="margin-right: 10px;">
+                            <input type="checkbox" id="chordModeCheck"> 和弦模式
+                        </label>
+                        <button id="addCustomChordBtn" class="action-btn" style="min-width: auto; padding: 4px 10px;">自定义</button>
+                    </div>
+                    <div class="tool-row">
+                        <span class="tool-label">常用：</span>
+                        <div class="chord-buttons" id="commonChordButtons">
+                        </div>
+                    </div>
+                    <div class="tool-row" id="customChordRow" style="display: none;">
+                        <span class="tool-label">和弦：</span>
+                        <input type="text" id="customChordInput" placeholder="如: C, Am, G7" style="flex: 1; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px;">
+                        <button id="confirmCustomChordBtn" class="action-btn" style="min-width: auto; padding: 4px 10px;">确定</button>
+                    </div>
+                    <div class="tool-row">
+                        <span class="tool-label">根音：</span>
+                        <div class="chord-root-buttons" id="chordRootButtons">
+                        </div>
+                    </div>
+                    <div class="tool-row">
+                        <span class="tool-label">类型：</span>
+                        <select id="chordTypeSelect" style="flex: 1; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px;">
+                            <option value="">大三</option>
+                            <option value="m">小三</option>
+                            <option value="7">属七</option>
+                            <option value="maj7">大七</option>
+                            <option value="m7">小七</option>
+                            <option value="dim">减三</option>
+                            <option value="aug">增三</option>
+                            <option value="sus4">挂四</option>
+                            <option value="sus2">挂二</option>
+                            <option value="6">六</option>
+                            <option value="m6">小六</option>
+                            <option value="9">九</option>
+                            <option value="power">强力五</option>
+                        </select>
+                    </div>
+                    <div class="tool-row">
+                        <button id="addChordBtn" class="action-btn">添加和弦</button>
+                        <button id="deleteChordBtn" class="action-btn danger">删除和弦</button>
+                    </div>
+                </div>
+
+                <h3 style="margin-top: 20px;">和弦库</h3>
+                <div class="chord-library-controls">
+                    <div class="tool-row">
+                        <button id="openChordLibraryBtn" class="action-btn" style="flex: 1;">管理和弦库</button>
+                    </div>
+                </div>
+
                 <h3 style="margin-top: 20px;">播放控制</h3>
                 <div class="playback-controls">
                     <button id="playBtn" class="play-btn">▶ 播放</button>
@@ -122,7 +176,12 @@
                     <li>选中音符后按Delete键可删除</li>
                     <li>拖动音符可改变位置</li>
                     <li>点击小节线可调整位置</li>
+                    <li>开启和弦模式后点击谱面添加和弦</li>
+                    <li>和弦会跟随下方的音符一起移动</li>
+                    <li>改变调号时和弦会自动转调</li>
                 </ul>
+                <h3 style="margin-top: 20px;">和弦列表</h3>
+                <div id="chordList" class="chord-list"></div>
                 <h3 style="margin-top: 20px;">音符列表</h3>
                 <div id="noteList" class="note-list"></div>
             </aside>
@@ -131,14 +190,75 @@
 
     <script src="js/utils/NoteUtils.js"></script>
     <script src="js/utils/MidiUtils.js"></script>
+    <script src="js/utils/ChordUtils.js"></script>
     <script src="js/models/Note.js"></script>
     <script src="js/models/BarLine.js"></script>
+    <script src="js/models/Chord.js"></script>
     <script src="js/ScoreRenderer.js"></script>
     <script src="js/NoteEditor.js"></script>
     <script src="js/AudioSynthesizer.js"></script>
     <script src="js/PlaybackController.js"></script>
     <script src="js/MidiExporter.js"></script>
     <script src="js/ImageExporter.js"></script>
+    <div id="chordLibraryModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>和弦库管理</h2>
+                <button class="modal-close" id="closeChordLibraryBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="chord-library-toolbar">
+                    <button id="addNewChordBtn" class="action-btn">+ 新建和弦</button>
+                    <button id="resetChordLibraryBtn" class="action-btn danger">恢复默认</button>
+                </div>
+                <div class="chord-library-grid" id="chordLibraryGrid">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="chordEditorModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="chordEditorTitle">编辑和弦</h2>
+                <button class="modal-close" id="closeChordEditorBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="chord-editor-form">
+                    <div class="form-row">
+                        <label>和弦名称：</label>
+                        <input type="text" id="chordEditorName" placeholder="如: C, Am, G7">
+                    </div>
+                    <div class="form-row">
+                        <label>显示名称：</label>
+                        <input type="text" id="chordEditorDisplay" placeholder="如: C, Am, G7">
+                    </div>
+                    <div class="form-row">
+                        <label>描述：</label>
+                        <input type="text" id="chordEditorDescription" placeholder="如: C大三和弦">
+                    </div>
+                    <div class="form-row">
+                        <label>吉他指法：</label>
+                        <div class="fingering-inputs" id="fingeringInputs">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <label>起始品位：</label>
+                        <input type="number" id="chordEditorStartFret" value="1" min="1" max="20">
+                    </div>
+                    <div class="form-row">
+                        <label>指法预览：</label>
+                        <canvas id="fingeringPreviewCanvas" width="120" height="150"></canvas>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button id="saveChordBtn" class="action-btn">保存</button>
+                    <button id="cancelChordBtn" class="action-btn danger">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="js/app.js"></script>
 </body>
 </html>

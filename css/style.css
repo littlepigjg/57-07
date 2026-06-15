@@ -347,3 +347,365 @@ body {
     font-size: 10px;
     opacity: 0.7;
 }
+
+.chord-tools {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.chord-buttons,
+.chord-root-buttons {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.common-chord-btn,
+.chord-root-btn {
+    padding: 4px 10px;
+    border: 1px solid #1565c0;
+    background: white;
+    color: #1565c0;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.2s;
+    min-width: 32px;
+}
+
+.common-chord-btn:hover,
+.chord-root-btn:hover {
+    background: #1565c0;
+    color: white;
+}
+
+.common-chord-btn.active,
+.chord-root-btn.active {
+    background: #1565c0;
+    color: white;
+}
+
+.chord-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    padding: 8px;
+    margin-bottom: 12px;
+}
+
+.chord-item {
+    padding: 6px 10px;
+    margin-bottom: 4px;
+    background: #e3f2fd;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.2s;
+    border-left: 3px solid #1565c0;
+}
+
+.chord-item:hover {
+    background: #bbdefb;
+}
+
+.chord-item.selected {
+    background: #1565c0;
+    color: white;
+    border-left-color: #0d47a1;
+}
+
+.chord-item .chord-info {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.chord-item .chord-name {
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.chord-item .chord-type {
+    font-size: 10px;
+    opacity: 0.7;
+}
+
+.chord-item .chord-position {
+    font-size: 10px;
+    opacity: 0.7;
+    margin-top: 2px;
+}
+
+.chord-item.selected .chord-type,
+.chord-item.selected .chord-position {
+    opacity: 0.8;
+}
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+}
+
+.modal-content {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    max-width: 90%;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-content .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #eee;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.modal-content .modal-header h2 {
+    font-size: 18px;
+    font-weight: 500;
+    margin: 0;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 28px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.modal-close:hover {
+    opacity: 1;
+}
+
+.modal-content .modal-body {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.chord-library-toolbar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.chord-library-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 16px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.chord-library-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+    background: #fafafa;
+}
+
+.chord-library-card:hover {
+    border-color: #667eea;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+    transform: translateY(-2px);
+}
+
+.chord-card-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.chord-card-name {
+    font-weight: bold;
+    font-size: 16px;
+    color: #1565c0;
+}
+
+.chord-card-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.chord-card-edit,
+.chord-card-delete {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+
+.chord-card-edit:hover {
+    background: #e3f2fd;
+    color: #1565c0;
+}
+
+.chord-card-delete:hover {
+    background: #ffebee;
+    color: #e53935;
+}
+
+.chord-canvas {
+    background: white;
+    border-radius: 4px;
+}
+
+.chord-card-desc {
+    font-size: 11px;
+    color: #666;
+    text-align: center;
+    min-height: 14px;
+}
+
+.chord-card-use {
+    width: 100%;
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+
+.chord-card-use:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+}
+
+.chord-editor-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 400px;
+}
+
+.form-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.form-row label {
+    min-width: 80px;
+    font-size: 13px;
+    color: #555;
+    font-weight: 500;
+}
+
+.form-row input[type="text"],
+.form-row input[type="number"] {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.2s;
+}
+
+.form-row input[type="text"]:focus,
+.form-row input[type="number"]:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.fingering-inputs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.fingering-input-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.fingering-label {
+    font-size: 11px;
+    color: #666;
+    min-width: auto;
+}
+
+.fingering-select {
+    padding: 6px 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    min-width: 50px;
+    text-align: center;
+}
+
+.fingering-select:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+#fingeringPreviewCanvas {
+    background: white;
+    border: 1px solid #eee;
+    border-radius: 6px;
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #eee;
+}
+
+.form-actions .action-btn {
+    flex: 0 0 auto;
+    min-width: 100px;
+}
+
+.chord-library-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
